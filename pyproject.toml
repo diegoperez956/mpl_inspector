@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mpl_inspector"
+version = "0.3.0"
+description = "DevTools-style inspection utilities for Matplotlib figures."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Diego" }
+]
+dependencies = [
+  "matplotlib>=3.8",
+  "numpy>=1.25",
+]
+keywords = ["matplotlib", "debugging", "inspection", "visualization", "developer-tools"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Debuggers",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
+
+[project.urls]
+Homepage = "https://github.com/diegoperez956/mpl_inspector"
+Repository = "https://github.com/diegoperez956/mpl_inspector"
+Issues = "https://github.com/diegoperez956/mpl_inspector/issues"
+
+[project.optional-dependencies]
+clipboard = [
+  "pyperclip>=1.8",
+]
+dev = [
+  "build>=1.2",
+  "pytest>=8.0",
+  "twine>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mpl_inspector"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
