@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -23,6 +22,14 @@ def show_in_notebook(
     if not _running_in_ipython():
         return False
 
+    if _is_nbagg_canvas(figure) and not _is_widget_canvas(figure):
+        manager = getattr(figure.canvas, "manager", None)
+        if manager is not None and hasattr(manager, "show"):
+            manager.show()
+        else:
+            plt.show()
+        return True
+
     try:
         from IPython.display import display
     except ImportError:
@@ -32,14 +39,6 @@ def show_in_notebook(
         if minimal_ui:
             configure_widget_canvas(figure, minimal_ui=minimal_ui)
         display(figure.canvas)
-        return True
-
-    if _is_nbagg_canvas(figure):
-        manager = getattr(figure.canvas, "manager", None)
-        if manager is not None and hasattr(manager, "show"):
-            manager.show()
-        else:
-            plt.show()
         return True
 
     # Static notebook fallback: still display the figure even if interaction

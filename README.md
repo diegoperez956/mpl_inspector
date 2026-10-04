@@ -6,6 +6,27 @@
 import mpl_inspector
 ```
 
+## Headless mode for AI agents
+
+No GUI needed. Run a plotting script, get a PNG + JSON per figure and a list of
+problems with suggested fixes; the exit code is non-zero when errors remain:
+
+```bash
+mpl-inspect plot.py            # or: python -m mpl_inspector plot.py
+```
+
+```python
+data = mpl_inspector.snapshot(fig)  # figure > axes > artists as JSON-ready dict
+issues = mpl_inspector.lint(fig)    # [{"code", "severity", "message", "fix", "location"}, ...]
+```
+
+Diagnostics cover overlapping/cut-off text and tick labels, missing labels and
+titles, small fonts, low contrast, colorblind-unsafe colors and rainbow
+colormaps, legends covering data, data outside the view, empty axes, too many
+categories, inconsistent scales across subplots, and layout-engine failures.
+See [AGENT.md](AGENT.md) for the schema, every diagnostic code, and the
+plot → inspect → fix loop with a worked example.
+
 ## Capabilities
 
 - Hover over supported artists and see a visual highlight.
