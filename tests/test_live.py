@@ -112,6 +112,21 @@ def test_set_rerenders_and_emits_events(client, fig):
     assert change["params"] == {"figure": "@f1", "ref": "@a5", "what": "set"}
 
 
+def test_new_figure_after_collected_one_still_emits_draw(server, client):
+    client.call("Events.subscribe", events=["draw"])
+    old, _ = plt.subplots()
+    client.call("Figure.list")
+    plt.close(old)
+    del old, _
+    gc.collect()
+    new, _ = plt.subplots()
+    ref = client.call("Figure.list")[0]["ref"]
+    client.events.clear()
+    new.canvas.draw()
+    client.call("Session.info")
+    assert {"method": "Events.draw", "params": {"figure": ref}} in [{k: e[k] for k in ("method", "params")} for e in client.events]
+
+
 def test_set_title_text(client, fig):
     client.call("Artist.set", ref="ax0.title", props={"text": "New", "fontsize": 20})
     assert fig.axes[0].get_title() == "New"

@@ -106,8 +106,8 @@ class LiveServer:
         self.script = script
         self.script_error: str | None = None
         self._figures: list[Figure] = []
-        self._connected: set[int] = set()
-        self._highlights: dict[int, list[Any]] = {}
+        self._connected: weakref.WeakSet[Figure] = weakref.WeakSet()
+        self._highlights: weakref.WeakKeyDictionary[Figure, list[Any]] = weakref.WeakKeyDictionary()
         self._subscribers: dict[Any, set[str]] = {}
         self._stopped = threading.Event()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -213,11 +213,15 @@ class LiveServer:
 
     # -- object lookup ---------------------------------------------------
 
-    def figures(self) -> list[Figure]:
+    def _visible(self) -> list[Figure]:
+        """Open pyplot figures in Gcf order, then explicitly served ones."""
         from matplotlib._pylab_helpers import Gcf
 
         alive = [manager.canvas.figure for manager in Gcf.get_all_fig_managers()]
-        alive += [fig for fig in self._figures if not any(fig is known for known in alive)]
+        return alive + [fig for fig in self._figures if not any(fig is known for known in alive)]
+
+    def figures(self) -> list[Figure]:
+        alive = self._visible()
         for fig in alive:
             self._connect_figure(fig)
             for obj in self._targets(fig).values():  # deterministic refs in tree order
@@ -237,9 +241,9 @@ class LiveServer:
 
     def _connect_figure(self, fig: Figure) -> None:
         ref = self.refs.ref(fig)
-        if id(fig) in self._connected:
+        if fig in self._connected:
             return
-        self._connected.add(id(fig))
+        self._connected.add(fig)
         fig.canvas.mpl_connect("draw_event", lambda event: self._emit("draw", {"figure": ref}))
         fig.canvas.mpl_connect("resize_event", lambda event: self._emit("resize", {"figure": ref, "size_px": [event.width, event.height]}))
 
@@ -269,7 +273,7 @@ class LiveServer:
                 self.figures()  # assign refs to anything created since the last walk
                 obj = self.refs.get(ref)
             owner = obj if isinstance(obj, Figure) else getattr(obj, "figure", None)
-            if owner is None or not any(root_figure(owner) is fig for fig in self.figures()):
+            if owner is None or not any(root_figure(owner) is fig for fig in self._visible()):
                 raise RpcError("NOT_FOUND", f"{ref} belongs to a closed figure; list open ones with Figure.list")
             return obj
         obj = self._targets(self._figure(figure)).get(ref)
@@ -436,13 +440,13 @@ class LiveServer:
         handle = create_highlight(obj, style=HighlightStyle(color=color), renderer=get_renderer(fig))
         if handle is None:
             raise RpcError("NO_EXTENT", f"cannot highlight {ref}")
-        self._highlights.setdefault(id(fig), []).append(handle)
+        self._highlights.setdefault(fig, []).append(handle)
         self._changed(fig, "highlight", self.refs.ref(obj))
-        return {"ref": self.refs.ref(obj), "highlights": len(self._highlights[id(fig)])}
+        return {"ref": self.refs.ref(obj), "highlights": len(self._highlights[fig])}
 
     def _artist_clear(self, figure: str | None = None) -> dict[str, Any]:
         fig = self._figure(figure)
-        handles = self._highlights.pop(id(fig), [])
+        handles = self._highlights.pop(fig, [])
         for handle in handles:
             handle.remove()
         self._changed(fig, "clearHighlights", self.refs.ref(fig))
