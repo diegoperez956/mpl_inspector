@@ -1,6 +1,7 @@
 import json
 import os
 import signal
+import subprocess
 import textwrap
 
 import pytest
@@ -52,6 +53,20 @@ def test_home_without_session(sessions, capsys):
     assert "help[1]:\n  Run `mpl-axi launch <script.py>`" in out
 
 
+def test_unreadable_session_kept_dead_session_removed(sessions, capsys):
+    sessions.mkdir(parents=True)
+    partial = sessions / "1.json"
+    partial.write_text("")  # a session file caught mid-write
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    dead = sessions / f"{proc.pid}.json"
+    dead.write_text(json.dumps({"pid": proc.pid, "url": "ws://127.0.0.1:1/x"}))
+    code, out = run(capsys, "sessions")
+    assert code == 0
+    assert partial.exists()
+    assert not dead.exists()
+
+
 def test_errors_are_terse_with_recovery(sessions, capsys):
     code, out = run(capsys, "tree")
     assert code == 1
@@ -90,6 +105,12 @@ def test_lint_invoke_loop(launched, capsys):
 def test_screenshot_snapshot_events(launched, capsys, tmp_path):
     code, out = run(capsys, "screenshot", "@a1", "title.png")
     assert code == 0 and (tmp_path / "title.png").read_bytes().startswith(b"\x89PNG")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    os.chdir(elsewhere)
+    code, out = run(capsys, "screenshot", "@a1", "rel.png")
+    assert code == 0 and (elsewhere / "rel.png").exists() and not (tmp_path / "rel.png").exists()
+    os.chdir(tmp_path)
     code, out = run(capsys, "snapshot")
     assert json.loads((tmp_path / "mpl-axi-snapshot.json").read_text())["axes"][0]["title"] == "Revenue"
     code, out = run(capsys, "events", "--count", "1", "--timeout", "0.5")

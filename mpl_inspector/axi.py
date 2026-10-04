@@ -101,10 +101,16 @@ def _sessions() -> list[dict[str, Any]]:
     for path in sorted(sessions_dir().glob("*.json")):
         try:
             info = json.loads(path.read_text())
-            os.kill(int(info["pid"]), 0)
-        except (OSError, ValueError, KeyError):
+            pid = int(info["pid"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
             path.unlink(missing_ok=True)  # stale: process is gone
             continue
+        except PermissionError:
+            pass
         found.append(info)
     return found
 
@@ -272,7 +278,7 @@ def _value(text: str) -> Any:
 def cmd_screenshot(args: list[str]) -> Result:
     ref = next((a for a in args if a.startswith("@") or "." in a and not a.endswith(".png")), None)
     path = next((a for a in args if a.endswith(".png")), None) or f"mpl-axi-{(ref or 'figure').lstrip('@').replace('.', '_')}.png"
-    params: dict[str, Any] = {"path": path}
+    params: dict[str, Any] = {"path": str(Path(path).resolve())}
     if ref is not None and ref.startswith("@f"):
         params["figure"] = ref
     elif ref is not None:

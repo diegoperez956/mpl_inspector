@@ -58,7 +58,7 @@ def snapshot(fig: Figure) -> dict[str, Any]:
         "texts": [
             _text_record(text, f"fig.t{index}", None, renderer)
             for index, text in enumerate(fig.texts)
-            if not _is_internal(text)
+            if not _is_internal(text) and text is not suptitle
         ],
         "legends": [_legend_record(legend, None, renderer) for legend in fig.legends],
         "axes": [_axes_record(ax, renderer) for ax in fig.axes],

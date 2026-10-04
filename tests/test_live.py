@@ -10,7 +10,7 @@ import pytest
 from matplotlib.figure import Figure
 
 from mpl_inspector import toon
-from mpl_inspector.live import Client, LiveServer, RpcError
+from mpl_inspector.live import Client, LiveServer, RpcError, serve
 
 
 @pytest.fixture
@@ -169,6 +169,45 @@ def test_non_pyplot_figure_needs_tracking(server, client):
         client.call("Figure.getTree")
     server.track(figure)
     assert client.call("Figure.list")[0]["axes"] == 1
+
+
+def test_serve_keeps_closed_pyplot_figures_alive(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPL_INSPECTOR_SESSIONS", str(tmp_path))
+    server = serve()
+    try:
+        figure, ax = plt.subplots()
+        ax.plot([1, 2])
+        plt.close(figure)  # what the inline notebook backend does after each cell
+        client = Client(server.url, timeout=10)
+        try:
+            assert [f["axes"] for f in client.call("Figure.list")] == [1]
+        finally:
+            client.close()
+    finally:
+        server.stop()
+
+
+def test_session_file_is_replaced_atomically(server, tmp_path):
+    server.script = "plot.py"
+    server._write_session_file()
+    assert json.loads(server.session_file.read_text())["script"] == "plot.py"
+    assert stat.S_IMODE(server.session_file.stat().st_mode) == 0o600
+    assert [p.name for p in tmp_path.iterdir()] == [server.session_file.name]
+
+
+def test_suptitle_appears_once_in_tree(client, fig):
+    fig.suptitle("Big")
+    fig.supxlabel("time")
+    ids = [n["id"] for n in client.call("Figure.getTree") if n["type"] == "Text" and n["parent"] == "@f1"]
+    assert ids == ["fig.suptitle", "fig.supxlabel"]
+    assert node(client, "fig.supxlabel")["ref"].startswith("@a")
+
+
+def test_screenshot_of_offcanvas_element_is_refused(client, fig):
+    fig.text(1.5, 0.5, "gone")
+    with pytest.raises(RpcError) as err:
+        client.call("Figure.screenshot", ref="fig.t0")
+    assert err.value.code == "NO_EXTENT"
 
 
 def test_errors_are_coded(client, fig):

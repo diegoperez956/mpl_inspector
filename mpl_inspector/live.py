@@ -32,6 +32,7 @@ import secrets
 import socket
 import struct
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -48,7 +49,7 @@ from matplotlib.text import Text
 from matplotlib.transforms import Bbox
 
 from .highlight import HighlightStyle, create_highlight
-from .lint import lint
+from .lint import _sup_texts, lint
 from .provenance import infer_call
 from .snapshot import _bbox, _extent, _hex, _num, get_renderer, iter_axes_artists, root_figure, snapshot
 
@@ -148,9 +149,10 @@ class LiveServer:
     def _write_session_file(self) -> None:
         self.session_file.parent.mkdir(parents=True, exist_ok=True)
         info = {"pid": os.getpid(), "url": self.url, "port": self.port, "script": self.script, "started": int(time.time())}
-        fd = os.open(self.session_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd, tmp = tempfile.mkstemp(dir=self.session_file.parent, prefix=".session-", suffix=".tmp")
         with os.fdopen(fd, "w") as handle:
             json.dump(info, handle)
+        os.replace(tmp, self.session_file)
 
     # -- transport -------------------------------------------------------
 
@@ -247,11 +249,14 @@ class LiveServer:
     def _targets(self, fig: Figure) -> dict[str, Artist]:
         """Snapshot/lint target ids (``ax0.3``, ``ax0.title`` ...) -> objects."""
         targets: dict[str, Artist] = {}
-        suptitle = getattr(fig, "_suptitle", None)
-        if suptitle is not None:
-            targets["fig.suptitle"] = suptitle
+        for name in ("suptitle", "supxlabel", "supylabel"):
+            text = getattr(fig, f"_{name}", None)
+            if text is not None:
+                targets[f"fig.{name}"] = text
+        sup_texts = _sup_texts(fig)
         for index, text in enumerate(fig.texts):
-            targets.setdefault(f"fig.t{index}", text)
+            if text not in sup_texts:
+                targets[f"fig.t{index}"] = text
         for ax_index, ax in enumerate(fig.axes):
             prefix = f"ax{ax_index}"
             targets[prefix] = ax
@@ -371,6 +376,8 @@ class LiveServer:
                 raise RpcError("NO_EXTENT", f"{ref} has no on-screen extent (hidden or empty?)")
             box = Bbox.from_extents(box.x0 - padding, box.y0 - padding, box.x1 + padding, box.y1 + padding)
             crop = Bbox.intersection(box, fig.bbox)
+            if crop is None:
+                raise RpcError("NO_EXTENT", f"{ref} lies entirely outside the figure canvas")
         buffer = io.BytesIO()
         with matplotlib.rc_context({"savefig.bbox": "standard"}):
             bbox_inches = crop.transformed(fig.dpi_scale_trans.inverted()) if crop is not None else None
@@ -663,12 +670,35 @@ def serve(fig: Figure | None = None, *, port: int = 0) -> LiveServer:
     Every pyplot figure is visible automatically; pass non-pyplot figures
     (``Figure()``) explicitly. Opt-in only: nothing listens until you call this.
     """
+    from matplotlib._pylab_helpers import Gcf
+
     global _SERVER
     if _SERVER is None:
         _SERVER = LiveServer(port)
+    _track_pyplot_figures()
+    for manager in Gcf.get_all_fig_managers():
+        _SERVER.track(manager.canvas.figure)
     if fig is not None:
         _SERVER.track(fig)
     return _SERVER
+
+
+def _track_pyplot_figures() -> None:
+    """Remember (by weakref) every pyplot figure made active, so figures that
+    the inline notebook backend closes after each cell stay inspectable."""
+    from matplotlib._pylab_helpers import Gcf
+
+    set_active = Gcf.set_active.__func__
+    if getattr(set_active, "_mpl_inspector", False):
+        return
+
+    def tracking_set_active(cls: Any, manager: Any) -> None:
+        set_active(cls, manager)
+        if _SERVER is not None:
+            _SERVER.track(manager.canvas.figure)
+
+    tracking_set_active._mpl_inspector = True  # type: ignore[attr-defined]
+    Gcf.set_active = classmethod(tracking_set_active)  # type: ignore[method-assign]
 
 
 def main(argv: list[str] | None = None) -> int:
