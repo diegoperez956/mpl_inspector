@@ -171,20 +171,31 @@ def test_non_pyplot_figure_needs_tracking(server, client):
     assert client.call("Figure.list")[0]["axes"] == 1
 
 
-def test_serve_keeps_closed_pyplot_figures_alive(tmp_path, monkeypatch):
+def test_closed_pyplot_figures_drop_out_unless_served_explicitly(tmp_path, monkeypatch):
     monkeypatch.setenv("MPL_INSPECTOR_SESSIONS", str(tmp_path))
     server = serve()
+    client = Client(server.url, timeout=10)
     try:
-        figure, ax = plt.subplots()
+        discarded, _ = plt.subplots()
+        kept, ax = plt.subplots()
         ax.plot([1, 2])
-        plt.close(figure)  # what the inline notebook backend does after each cell
-        client = Client(server.url, timeout=10)
-        try:
-            assert [f["axes"] for f in client.call("Figure.list")] == [1]
-        finally:
-            client.close()
+        serve(kept)
+        plt.close("all")  # what the inline notebook backend does after each cell
+        assert [f["axes"] for f in client.call("Figure.list")] == [1]
     finally:
+        client.close()
         server.stop()
+
+
+def test_snapshot_text_ids_all_resolve(client, fig):
+    fig.suptitle("Big")
+    fig.supxlabel("time")
+    fig.supylabel("value")
+    fig.text(0.5, 0.5, "note")
+    ids = [t["id"] for t in client.call("Figure.snapshot")["texts"]]
+    assert ids == ["fig.suptitle", "fig.supxlabel", "fig.supylabel", "fig.t3"]
+    for target in ids:
+        assert client.call("Artist.get", ref=target)["type"] == "Text"
 
 
 def test_session_file_is_replaced_atomically(server, tmp_path):
@@ -198,8 +209,9 @@ def test_session_file_is_replaced_atomically(server, tmp_path):
 def test_suptitle_appears_once_in_tree(client, fig):
     fig.suptitle("Big")
     fig.supxlabel("time")
-    ids = [n["id"] for n in client.call("Figure.getTree") if n["type"] == "Text" and n["parent"] == "@f1"]
-    assert ids == ["fig.suptitle", "fig.supxlabel"]
+    nodes = [n for n in client.call("Figure.getTree") if n["type"] == "Text" and n["parent"] == "@f1"]
+    assert [n["id"] for n in nodes] == ["fig.suptitle", "fig.supxlabel"]
+    assert len({n["ref"] for n in nodes}) == 2
     assert node(client, "fig.supxlabel")["ref"].startswith("@a")
 
 

@@ -40,7 +40,7 @@ def test_schema_shape(snap):
     assert set(snap) == FIGURE_KEYS
     assert snap["schema_version"] == SCHEMA_VERSION
     assert snap["suptitle"] == "Suite"
-    assert "Suite" not in [t["text"] for t in snap["texts"]]
+    assert [t["id"] for t in snap["texts"] if t["text"] == "Suite"] == ["fig.suptitle"]
     assert snap["layout_engine"] == "constrained"
     for ax in snap["axes"]:
         assert set(ax) == AXES_KEYS

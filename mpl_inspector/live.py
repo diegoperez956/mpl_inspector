@@ -49,9 +49,9 @@ from matplotlib.text import Text
 from matplotlib.transforms import Bbox
 
 from .highlight import HighlightStyle, create_highlight
-from .lint import _sup_texts, lint
+from .lint import lint
 from .provenance import infer_call
-from .snapshot import _bbox, _extent, _hex, _num, get_renderer, iter_axes_artists, root_figure, snapshot
+from .snapshot import _bbox, _extent, _hex, _num, figure_texts, get_renderer, iter_axes_artists, root_figure, snapshot
 
 PROTOCOL_VERSION = "1"
 _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -216,11 +216,12 @@ class LiveServer:
     def figures(self) -> list[Figure]:
         from matplotlib._pylab_helpers import Gcf
 
-        alive = [fig for fig in (ref() for ref in self._figures) if fig is not None]
+        tracked = [fig for fig in (ref() for ref in self._figures) if fig is not None]
+        self._figures = [weakref.ref(fig) for fig in tracked]
+        alive = list(tracked)
         for manager in Gcf.get_all_fig_managers():
             if not any(fig is manager.canvas.figure for fig in alive):
                 alive.append(manager.canvas.figure)
-        self._figures = [weakref.ref(fig) for fig in alive]
         for fig in alive:
             self._connect_figure(fig)
             for obj in self._targets(fig).values():  # deterministic refs in tree order
@@ -249,14 +250,7 @@ class LiveServer:
     def _targets(self, fig: Figure) -> dict[str, Artist]:
         """Snapshot/lint target ids (``ax0.3``, ``ax0.title`` ...) -> objects."""
         targets: dict[str, Artist] = {}
-        for name in ("suptitle", "supxlabel", "supylabel"):
-            text = getattr(fig, f"_{name}", None)
-            if text is not None:
-                targets[f"fig.{name}"] = text
-        sup_texts = _sup_texts(fig)
-        for index, text in enumerate(fig.texts):
-            if text not in sup_texts:
-                targets[f"fig.t{index}"] = text
+        targets.update(figure_texts(fig))
         for ax_index, ax in enumerate(fig.axes):
             prefix = f"ax{ax_index}"
             targets[prefix] = ax
@@ -667,45 +661,25 @@ def sessions_dir() -> Path:
 def serve(fig: Figure | None = None, *, port: int = 0) -> LiveServer:
     """Start (or reuse) this process's live server and track *fig* if given.
 
-    Every pyplot figure is visible automatically; pass non-pyplot figures
-    (``Figure()``) explicitly. Opt-in only: nothing listens until you call this.
+    Open pyplot figures are visible automatically; closed ones are not. Pass
+    non-pyplot figures (``Figure()``) explicitly, and in a notebook with the
+    inline backend (which closes figures after each cell) call ``serve(fig)``
+    or use the ipympl widget backend to keep *fig* inspectable. Opt-in only:
+    nothing listens until you call this.
     """
-    from matplotlib._pylab_helpers import Gcf
-
     global _SERVER
     if _SERVER is None:
         _SERVER = LiveServer(port)
-    _track_pyplot_figures()
-    for manager in Gcf.get_all_fig_managers():
-        _SERVER.track(manager.canvas.figure)
     if fig is not None:
         _SERVER.track(fig)
     return _SERVER
-
-
-def _track_pyplot_figures() -> None:
-    """Remember (by weakref) every pyplot figure made active, so figures that
-    the inline notebook backend closes after each cell stay inspectable."""
-    from matplotlib._pylab_helpers import Gcf
-
-    set_active = Gcf.set_active.__func__
-    if getattr(set_active, "_mpl_inspector", False):
-        return
-
-    def tracking_set_active(cls: Any, manager: Any) -> None:
-        set_active(cls, manager)
-        if _SERVER is not None:
-            _SERVER.track(manager.canvas.figure)
-
-    tracking_set_active._mpl_inspector = True  # type: ignore[attr-defined]
-    Gcf.set_active = classmethod(tracking_set_active)  # type: ignore[method-assign]
 
 
 def main(argv: list[str] | None = None) -> int:
     """``python -m mpl_inspector.live script.py [args]``: run headlessly, then serve until shutdown."""
     import runpy
 
-    from .cli import _capture_figures, _open_figures, _remember, script_traceback
+    from .cli import _capture_figures, script_traceback
 
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
@@ -714,9 +688,8 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["MPLBACKEND"] = "Agg"
     matplotlib.use("Agg", force=True)
     path = Path(argv[0]).resolve()
-    figures: list[Any] = []
     error = None
-    with _capture_figures(figures):
+    with _capture_figures([]):
         old_argv = sys.argv
         sys.argv = [str(path), *argv[1:]]
         sys.path.insert(0, str(path.parent))
@@ -729,13 +702,12 @@ def main(argv: list[str] | None = None) -> int:
             error = script_traceback(exc, path)
         finally:
             sys.argv = old_argv
-        _remember(figures, *_open_figures())
     server = serve()  # reuses the server if the script already called serve()
     server.script, server.script_error = str(path), error
     server._write_session_file()
-    for fig in figures:
-        server.track(fig)
-    print(json.dumps({"url": server.url, "pid": os.getpid(), "figures": len(figures), "script_error": error}), flush=True)
+    with _LOCK:
+        count = len(server.figures())
+    print(json.dumps({"url": server.url, "pid": os.getpid(), "figures": count, "script_error": error}), flush=True)
     server.wait()
     return 0
 

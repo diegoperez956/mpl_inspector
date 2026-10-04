@@ -44,6 +44,7 @@ from .snapshot import (
     _extent,
     artist_ids,
     axis_units,
+    figure_texts,
     get_renderer,
     is_colorbar_axes,
     iter_axes_artists,
@@ -156,12 +157,8 @@ class _Ctx:
 
     def _collect_texts(self) -> Iterator[_TextEl]:
         fig = self.fig
-        for name in ("suptitle", "supxlabel", "supylabel"):
-            text = getattr(fig, f"_{name}", None)
-            yield from self._text_el(text, f"fig.{name}", None)
-        for index, text in enumerate(fig.texts):
-            if text not in _sup_texts(fig):
-                yield from self._text_el(text, f"fig.t{index}", None)
+        for target, text in figure_texts(fig):
+            yield from self._text_el(text, target, None)
         for ax in self.axes:
             ax_id = self.ax_id(ax)
             yield from self._text_el(ax.title, f"{ax_id}.title", ax)
@@ -223,10 +220,6 @@ def _polygons_overlap(a: np.ndarray, b: np.ndarray, min_px: float = 1.0) -> bool
             if min(pa.max(), pb.max()) - max(pa.min(), pb.min()) <= min_px:
                 return False
     return True
-
-
-def _sup_texts(fig: Figure) -> list[Text]:
-    return [t for t in (getattr(fig, f"_sup{n}", None) for n in ("title", "xlabel", "ylabel")) if t is not None]
 
 
 def _tick_labels(axis: Any) -> Iterator[Text]:

@@ -126,6 +126,28 @@ def test_sessions_attach_stop(launched, sessions, capsys):
     assert "stopping: true" in out
 
 
+def test_launch_hides_figures_the_script_closed(sessions, tmp_path, capsys):
+    script = tmp_path / "batch.py"
+    script.write_text(textwrap.dedent("""
+        import matplotlib.pyplot as plt
+        for n in range(3):
+            fig, ax = plt.subplots()
+            ax.set_title(f"saved {n}")
+            fig.savefig(f"out{n}.png")
+            plt.close(fig)
+        fig, ax = plt.subplots()
+        ax.set_title("kept")
+    """))
+    assert main(["launch", str(script)]) == 0
+    capsys.readouterr()
+    try:
+        for _ in range(2):
+            code, out = run(capsys, "figures")
+            assert code == 0 and "figures[1]" in out and "kept" in out and "saved" not in out
+    finally:
+        main(["stop"])
+
+
 def test_launch_script_that_calls_serve(sessions, tmp_path, capsys):
     script = tmp_path / "served.py"
     script.write_text(textwrap.dedent(SCRIPT) + "import mpl_inspector\nmpl_inspector.serve()\n")

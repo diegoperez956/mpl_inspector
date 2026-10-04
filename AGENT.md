@@ -212,9 +212,13 @@ mpl-axi launch plot.py            # runs plot.py headlessly, keeps its figures a
 
 ```python
 import mpl_inspector
-mpl_inspector.serve()             # in your own process or notebook; pyplot figures are visible
-mpl_inspector.serve(fig)          # also expose a figure made with Figure() directly
+mpl_inspector.serve()             # in your own process or notebook; open pyplot figures are visible
+mpl_inspector.serve(fig)          # also expose fig after it is closed, or a Figure() made directly
 ```
+
+Closed pyplot figures drop out of the session. The notebook inline backend
+closes figures after every cell, so there call `mpl_inspector.serve(fig)` (or use
+the ipympl widget backend) to keep a figure inspectable.
 
 Then drive it:
 
