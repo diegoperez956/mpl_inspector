@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from mpl_inspector import SCHEMA_VERSION, snapshot
+from mpl_inspector import SCHEMA_VERSION, lint, snapshot
 from mpl_inspector.snapshot import artist_ids
 
 FIGURE_KEYS = {"schema_version", "type", "size_inches", "dpi", "size_px", "facecolor", "suptitle", "layout_engine", "texts", "legends", "axes"}
@@ -148,3 +148,20 @@ def test_fresh_figure_needs_no_manual_draw():
     snap = snapshot(fig)
     plt.close(fig)
     assert snap["axes"][0]["bbox_display"] is not None
+
+
+def test_subfigure_axes_use_root_numbering():
+    fig = plt.figure(figsize=(8, 3))
+    left, right = fig.subfigures(1, 2)
+    left.subplots().plot([1, 2])
+    a, b = right.subplots(1, 2, sharey=True)
+    a.plot([3, 4])
+    b.plot([5, 6])
+    snap = snapshot(fig)
+    assert [ax["id"] for ax in snap["axes"]] == ["ax0", "ax1", "ax2"]
+    assert [ax["index"] for ax in snap["axes"]] == [0, 1, 2]
+    assert [ax["artists"][0]["id"] for ax in snap["axes"]] == ["ax0.0", "ax1.0", "ax2.0"]
+    assert snap["axes"][1]["yaxis"]["shared_with"] == ["ax2"]
+    targets = {d["location"]["target"] for d in lint(fig) if d["code"] == "missing-title"}
+    assert targets == {"ax0.title", "ax1.title", "ax2.title"}
+    plt.close(fig)

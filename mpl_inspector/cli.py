@@ -96,14 +96,16 @@ def run(script: str, script_args: list[str] | None = None, *, out: str = "mpl-in
     elif not figures:
         diagnostics.insert(0, _top_level("no-figures", "the script created no Matplotlib figure", "create a figure (plt.subplots()) and do not plt.close() it before the script ends, or call plt.show()"))
 
+    seen = {(d["code"], d["message"]) for d in diagnostics}
     entries = []
     for index, fig in enumerate(figures):
         png = out_dir / f"{path.stem}-fig{index}.png"
         entry: dict[str, Any] = {"index": index, "png": str(png), "diagnostics": [], "snapshot": None}
         try:
-            entry["diagnostics"] = lint(fig, min_fontsize=min_fontsize)
+            entry["diagnostics"] = [d for d in lint(fig, min_fontsize=min_fontsize) if (d["code"], d["message"]) not in seen]
             entry["snapshot"] = snapshot(fig)
-            fig.savefig(png, dpi=fig.dpi)  # no bbox_inches: PNG pixels match bbox_display
+            with matplotlib.rc_context({"savefig.bbox": "standard"}):
+                fig.savefig(png, dpi=fig.dpi, bbox_inches=None)  # uncropped: PNG pixels match bbox_display
         except Exception:  # noqa: BLE001 - a broken figure must not hide the others
             entry["diagnostics"] = [_top_level("script-error", f"inspecting figure {index} failed", traceback.format_exc().strip().splitlines()[-1])]
         entries.append(entry)

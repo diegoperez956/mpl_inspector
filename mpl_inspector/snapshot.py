@@ -97,6 +97,14 @@ def artist_ids(fig: Figure) -> dict[int, str]:
     return ids
 
 
+def root_figure(artist: Artist) -> Figure:
+    """The top-level Figure of *artist*, walking up through any SubFigures."""
+    fig = artist.figure
+    while fig.figure is not fig:
+        fig = fig.figure
+    return fig
+
+
 def layout_engine_name(fig: Figure) -> str | None:
     engine = fig.get_layout_engine()
     if engine is None:
@@ -124,7 +132,7 @@ def is_colorbar_axes(ax: Axes) -> bool:
 
 
 def _axes_record(ax: Axes, renderer: Any) -> dict[str, Any]:
-    index = ax.figure.axes.index(ax)
+    index = root_figure(ax).axes.index(ax)
     ax_id = f"ax{index}"
     bbox = ax.get_window_extent(renderer)
     legend = ax.get_legend()
@@ -155,14 +163,15 @@ def _axis_record(ax: Axes, which: str) -> dict[str, Any]:
     axis = ax.xaxis if which == "x" else ax.yaxis
     low, high = ax.get_xlim() if which == "x" else ax.get_ylim()
     shared = ax.get_shared_x_axes() if which == "x" else ax.get_shared_y_axes()
-    siblings = [other for other in shared.get_siblings(ax) if other is not ax and other in ax.figure.axes]
+    axes = root_figure(ax).axes
+    siblings = [other for other in shared.get_siblings(ax) if other is not ax and other in axes]
     return {
         "label": axis.get_label_text(),
         "scale": axis.get_scale(),
         "lim": [_num(low), _num(high)],
         "inverted": bool(axis.get_inverted()),
         "units": axis_units(axis),
-        "shared_with": sorted(f"ax{ax.figure.axes.index(other)}" for other in siblings),
+        "shared_with": sorted(f"ax{axes.index(other)}" for other in siblings),
     }
 
 

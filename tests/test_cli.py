@@ -3,7 +3,9 @@ import subprocess
 import sys
 import textwrap
 
+import matplotlib
 import pytest
+from PIL import Image
 
 from mpl_inspector.cli import main
 
@@ -124,3 +126,32 @@ def test_python_dash_m(script, tmp_path):
     )
     assert result.returncode == 1, result.stderr
     assert "tick-label-overlap" in result.stdout
+
+
+def test_png_ignores_script_savefig_bbox(script, tmp_path):
+    source = """
+    import matplotlib.pyplot as plt
+    plt.rcParams["savefig.bbox"] = "tight"
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot([1, 2])
+    """
+    with matplotlib.rc_context():
+        main([str(script(source)), "-o", str(tmp_path / "out"), "--fail-on", "never"])
+    entry = report(tmp_path)["figures"][0]
+    with Image.open(entry["png"]) as png:
+        assert list(png.size) == entry["snapshot"]["size_px"]
+
+
+def test_layout_warning_reported_once(script, tmp_path):
+    source = f"""
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(4, 4, figsize=(1, 1), layout="tight")
+    for ax in axes.flat:
+        ax.set(title="a very long title", xlabel="a long x label", ylabel="a long y label")
+    fig.savefig({str(tmp_path / 'a.png')!r})
+    """
+    main([str(script(source)), "-o", str(tmp_path / "out"), "--fail-on", "never"])
+    data = report(tmp_path)
+    everything = data["diagnostics"] + data["figures"][0]["diagnostics"]
+    assert [d["code"] for d in everything].count("layout-warning") == 1
+    assert data["summary"]["warning"] == sum(d["severity"] == "warning" for d in everything)

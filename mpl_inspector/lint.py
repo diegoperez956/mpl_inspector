@@ -48,6 +48,7 @@ from .snapshot import (
     is_colorbar_axes,
     iter_axes_artists,
     layout_engine_name,
+    root_figure,
 )
 
 SEVERITIES = ("error", "warning", "info")
@@ -143,7 +144,7 @@ class _Ctx:
         self.texts = list(self._collect_texts())
 
     def ax_id(self, ax: Axes) -> str:
-        return f"ax{self.fig.axes.index(ax)}"
+        return f"ax{_ax_index(ax)}"
 
     def artist_id(self, artist: Artist) -> str:
         return self.ids.get(id(artist), type(artist).__name__)
@@ -259,8 +260,8 @@ def _diag(
     }
 
 
-def _ax_index(ctx: _Ctx, ax: Axes | None) -> int | None:
-    return None if ax is None else ctx.fig.axes.index(ax)
+def _ax_index(ax: Axes | None) -> int | None:
+    return None if ax is None else root_figure(ax).axes.index(ax)
 
 
 def _overlaps(a: Bbox, b: Bbox, min_px: float = 1.0) -> bool:
@@ -334,7 +335,7 @@ def _check_text_overlap(ctx: _Ctx) -> Iterator[dict[str, Any]]:
             "tick-label-overlap",
             f"{len(unique)} of {total} {which} tick labels on {ctx.ax_id(ax)} overlap each other",
             fix,
-            ax=_ax_index(ctx, ax),
+            ax=_ax_index(ax),
             target=group,
             bbox=Bbox.union([el.bbox for el in unique.values()]),
         )
@@ -348,7 +349,7 @@ def _check_text_overlap(ctx: _Ctx) -> Iterator[dict[str, Any]]:
             "text-overlap",
             f"{_quote(a.text)} ({a.target}) overlaps {_quote(b.text)} ({b.target})",
             "move one of them (x/y or xytext position), shorten it, or reduce its fontsize",
-            ax=_ax_index(ctx, a.ax),
+            ax=_ax_index(a.ax),
             target=a.target,
             bbox=Bbox.intersection(a.bbox, b.bbox),
         )
@@ -366,7 +367,7 @@ def _check_text_overlap(ctx: _Ctx) -> Iterator[dict[str, Any]]:
             "text-overlap",
             f"{len(crossing)} overlaps between text and other subplots: {examples}{more}",
             ctx.layout_fix(),
-            ax=_ax_index(ctx, crossing[0][3]),
+            ax=_ax_index(crossing[0][3]),
             target=crossing[0][0],
             bbox=Bbox.union([box for _, _, box, _ in crossing]),
         )
@@ -402,7 +403,7 @@ def _check_text_cut_off(ctx: _Ctx) -> Iterator[dict[str, Any]]:
             "text-cut-off",
             what,
             fix,
-            ax=_ax_index(ctx, first.ax),
+            ax=_ax_index(first.ax),
             target=group,
             bbox=Bbox.union([el.bbox for el in els]),
         )
@@ -423,7 +424,7 @@ def _check_small_font(ctx: _Ctx) -> Iterator[dict[str, Any]]:
             "small-font",
             f"{group} uses {size:g} pt text; minimum readable size is {ctx.min_fontsize:g} pt",
             fix,
-            ax=_ax_index(ctx, els[0].ax),
+            ax=_ax_index(els[0].ax),
             target=group,
             bbox=Bbox.union([el.bbox for el in els]),
         )
@@ -435,7 +436,7 @@ def _check_missing_labels(ctx: _Ctx) -> Iterator[dict[str, Any]]:
     ticked = {el.group for el in ctx.texts if el.group.endswith("ticklabels")}
     for ax in _plot_axes(ctx):
         ax_id = ctx.ax_id(ax)
-        index = _ax_index(ctx, ax)
+        index = _ax_index(ax)
         if all(isinstance(a, AxesImage) for a in _data_artists(ax)):
             continue  # ponytail: imshow pixel axes rarely need labels
         for which in ("x", "y"):
@@ -521,7 +522,7 @@ def _check_low_contrast(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                 "low-contrast",
                 f"{el.group} text {to_hex(fg)} on {to_hex(bg)} has contrast {ratio:.2f}:1 (< {MIN_TEXT_CONTRAST:g}:1)",
                 "use a darker text color (e.g. color='black' / '#333333') or a lighter background",
-                ax=_ax_index(ctx, el.ax),
+                ax=_ax_index(el.ax),
                 target=el.group,
                 bbox=el.bbox,
             )
@@ -536,7 +537,7 @@ def _check_low_contrast(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                     "low-contrast",
                     f"{_label_of(ctx, artist)} color {to_hex(fg)} on {to_hex(bg)} has contrast {ratio:.2f}:1 (< {MIN_MARK_CONTRAST:g}:1)",
                     "use a darker/more saturated color, raise alpha, or add an edgecolor",
-                    ax=_ax_index(ctx, ax),
+                    ax=_ax_index(ax),
                     target=ctx.artist_id(artist),
                     bbox=_extent(artist, ctx.renderer),
                 )
@@ -618,7 +619,7 @@ def _check_colorblind(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                     "colorblind-unsafe",
                     f"{_label_of(ctx, a)} ({hex_a}) and {_label_of(ctx, b)} ({hex_b}) look alike with {worst} (ΔE {delta[worst]:.1f})",
                     "plt.style.use('tableau-colorblind10') or pick Okabe-Ito colors; also vary linestyle/marker so color is not the only cue",
-                    ax=_ax_index(ctx, ax),
+                    ax=_ax_index(ax),
                     target=ctx.artist_id(a),
                     bbox=ax.bbox,
                 )
@@ -631,7 +632,7 @@ def _check_colorblind(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                         "rainbow-colormap",
                         f"{_label_of(ctx, artist)} uses the {name!r} colormap",
                         "cmap='viridis' or 'cividis' for sequential data, 'RdBu_r'/'coolwarm' for diverging data",
-                        ax=_ax_index(ctx, ax),
+                        ax=_ax_index(ax),
                         target=ctx.artist_id(artist),
                         bbox=_extent(artist, ctx.renderer),
                     )
@@ -659,7 +660,7 @@ def _check_legend(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                 "too-many-categories",
                 f"legend on {ctx.ax_id(ax)} has {entries} entries (> {MAX_LEGEND_ENTRIES})",
                 "group minor series into 'Other', split into subplots (small multiples), or label lines directly with ax.annotate",
-                ax=_ax_index(ctx, ax),
+                ax=_ax_index(ax),
                 target=f"{ctx.ax_id(ax)}.legend",
                 bbox=box,
             )
@@ -674,7 +675,7 @@ def _check_legend(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                 "legend-covers-data",
                 f"legend on {ctx.ax_id(ax)} covers data of {', '.join(covered)}",
                 fix,
-                ax=_ax_index(ctx, ax),
+                ax=_ax_index(ax),
                 target=f"{ctx.ax_id(ax)}.legend",
                 bbox=box,
             )
@@ -739,7 +740,7 @@ def _check_outside_limits(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                         "data-clipped",
                         f"{len(points) - inside} of {len(points)} points of {name} are outside the view or invalid for the {ax.get_xscale()}/{ax.get_yscale()} scale ({limits})",
                         "fine if you zoomed on purpose; otherwise ax.relim(); ax.autoscale_view(), widen ax.set_xlim/ax.set_ylim, or drop non-positive values on log axes",
-                        ax=_ax_index(ctx, ax),
+                        ax=_ax_index(ax),
                         target=ctx.artist_id(artist),
                         bbox=ax.bbox,
                     )
@@ -754,7 +755,7 @@ def _outside(ctx: _Ctx, ax: Axes, artist: Artist, message: str) -> dict[str, Any
         "artist-outside-limits",
         message,
         "ax.relim(); ax.autoscale_view() — or widen ax.set_xlim/ax.set_ylim to include the data (check for a wrong axis, units or transform)",
-        ax=_ax_index(ctx, ax),
+        ax=_ax_index(ax),
         target=ctx.artist_id(artist),
         bbox=ax.bbox,
     )
@@ -782,7 +783,7 @@ def _check_empty_and_categories(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                     "empty-axes",
                     f"{ax_id} is visible but contains no data",
                     "fig.delaxes(ax) for an unused subplot slot, plot into it, or ax.set_axis_off() if it is meant to be blank",
-                    ax=_ax_index(ctx, ax),
+                    ax=_ax_index(ax),
                     target=ax_id,
                     bbox=ax.bbox,
                 )
@@ -793,7 +794,7 @@ def _check_empty_and_categories(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                 "too-many-categories",
                 f"pie on {ax_id} has {wedges} wedges (> {MAX_PIE_WEDGES})",
                 "use a sorted horizontal bar chart (ax.barh) or group small slices into 'Other'",
-                ax=_ax_index(ctx, ax),
+                ax=_ax_index(ax),
                 target=ax_id,
                 bbox=ax.bbox,
             )
@@ -806,7 +807,7 @@ def _check_empty_and_categories(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                     "too-many-categories",
                     f"{which} axis of {ax_id} has {count} categories (> {MAX_CATEGORIES})",
                     "show the top N and group the rest into 'Other', or use ax.barh with a taller figure",
-                    ax=_ax_index(ctx, ax),
+                    ax=_ax_index(ax),
                     target=f"{ax_id}.{which}axis",
                     bbox=ax.bbox,
                 )
@@ -826,7 +827,7 @@ def _check_scales(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                     "inconsistent-scales",
                     f"{pair} both label {which} as {label!r} but use {axis_a.get_scale()}/{axis_units(axis_a)} vs {axis_b.get_scale()}/{axis_units(axis_b)} scale/units",
                     f"use the same ax.set_{which}scale(...) and data units on both, or label them differently",
-                    ax=_ax_index(ctx, b),
+                    ax=_ax_index(b),
                     target=f"{ctx.ax_id(b)}.{which}axis",
                     bbox=b.bbox,
                 )
@@ -841,7 +842,7 @@ def _check_scales(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                     "unshared-limits",
                     f"{pair} both show {label!r} on {which} but with different ranges {_fmt(lim_a)} vs {_fmt(lim_b)}",
                     f"plt.subplots(..., share{which}=True) or ax.share{which}(other) so panels compare directly",
-                    ax=_ax_index(ctx, b),
+                    ax=_ax_index(b),
                     target=f"{ctx.ax_id(b)}.{which}axis",
                     bbox=b.bbox,
                 )
@@ -855,7 +856,7 @@ def _check_layout(ctx: _Ctx) -> Iterator[dict[str, Any]]:
                 "axes-collapsed",
                 f"{ctx.ax_id(ax)} is {box.width:.0f}x{box.height:.0f} px",
                 "enlarge the figure, reduce the number of subplots, or shorten the labels that crowd it out; check layout-warning diagnostics",
-                ax=_ax_index(ctx, ax),
+                ax=_ax_index(ax),
                 target=ctx.ax_id(ax),
                 bbox=box,
             )
@@ -866,7 +867,7 @@ def _check_layout(ctx: _Ctx) -> Iterator[dict[str, Any]]:
             "axes-overlap",
             f"{ctx.ax_id(a)} and {ctx.ax_id(b)} overlap",
             f"{_CONSTRAINED_FIX}, or position axes with plt.subplots/GridSpec instead of fig.add_axes rectangles",
-            ax=_ax_index(ctx, b),
+            ax=_ax_index(b),
             target=ctx.ax_id(b),
             bbox=Bbox.intersection(a.bbox, b.bbox),
         )
