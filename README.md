@@ -27,6 +27,11 @@ categories, inconsistent scales across subplots, and layout-engine failures.
 See [AGENT.md](AGENT.md) for the schema, every diagnostic code, and the
 plot → inspect → fix loop with a worked example.
 
+Live sessions, DevTools-protocol style: `mpl_inspector.serve()` (or
+`mpl-axi launch plot.py`) exposes a process's figures over local JSON-RPC, and
+`mpl-axi` attaches to inspect, lint, edit (`set`, `invoke`), highlight and
+screenshot them without rerunning the script.
+
 ## Capabilities
 
 - Hover over supported artists and see a visual highlight.

@@ -54,8 +54,9 @@ def test_errors_exit_one_and_print_fix(script, tmp_path, capsys):
     code = main([str(script(BAD)), "-o", str(tmp_path / "out")])
     out = capsys.readouterr().out
     assert code == 1
-    assert "[error] fig0 ax0.xticklabels tick-label-overlap" in out
-    assert "fix: " in out
+    assert "]{figure,severity,code,target,message,fix}:" in out
+    assert "  fig0,error,tick-label-overlap,ax0.xticklabels," in out
+    assert "help[2]:" in out
     assert report(tmp_path)["figures"][0]["diagnostics"][0]["code"] == "tick-label-overlap"
 
 

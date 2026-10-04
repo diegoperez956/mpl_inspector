@@ -4,6 +4,7 @@ from .adapters import ArtistAdapter, ArtistMetadata, AdapterRegistry, get_defaul
 from .containers import find_container, find_contour_set
 from .inspector import FigureInspector, disable, display, enable, inspect, show
 from .lint import CODES, lint
+from .live import serve
 from .notebook import autosize_widget_canvas, configure_widget_canvas, fit_figure_to_cell
 from .provenance import infer_call
 from .snapshot import SCHEMA_VERSION, snapshot
@@ -27,6 +28,7 @@ __all__ = [
     "infer_call",
     "inspect",
     "lint",
+    "serve",
     "show",
     "snapshot",
 ]

@@ -55,14 +55,23 @@ def snapshot(fig: Figure) -> dict[str, Any]:
         "facecolor": _hex(fig.get_facecolor()),
         "suptitle": suptitle.get_text() if suptitle is not None else None,
         "layout_engine": layout_engine_name(fig),
-        "texts": [
-            _text_record(text, f"fig.t{index}", None, renderer)
-            for index, text in enumerate(fig.texts)
-            if not _is_internal(text)
-        ],
+        "texts": [_text_record(text, target, None, renderer) for target, text in figure_texts(fig) if not _is_internal(text)],
         "legends": [_legend_record(legend, None, renderer) for legend in fig.legends],
         "axes": [_axes_record(ax, renderer) for ax in fig.axes],
     }
+
+
+def figure_texts(fig: Figure) -> Iterator[tuple[str, Text]]:
+    """Figure-level texts with their target ids: ``fig.suptitle``/``fig.supxlabel``/``fig.supylabel``, then ``fig.tN``."""
+    sups = []
+    for name in ("suptitle", "supxlabel", "supylabel"):
+        text = getattr(fig, f"_{name}", None)
+        if text is not None:
+            sups.append(text)
+            yield f"fig.{name}", text
+    for index, text in enumerate(fig.texts):
+        if not any(text is sup for sup in sups):
+            yield f"fig.t{index}", text
 
 
 def get_renderer(fig: Figure) -> Any:

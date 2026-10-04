@@ -1,7 +1,7 @@
 """``mpl-inspect script.py``: run a plotting script headlessly and lint every figure.
 
 Writes ``<out>/<script>.json`` (snapshot + diagnostics per figure) and one
-``<out>/<script>-fig<N>.png`` per figure, prints one line per diagnostic and
+``<out>/<script>-fig<N>.png`` per figure, prints a TOON summary (one row per diagnostic) and
 exits with:
 
 * ``0`` — no diagnostic at or above ``--fail-on`` (default: ``error``)
@@ -24,6 +24,7 @@ from typing import Any, Iterator
 
 import matplotlib
 
+from . import toon
 from .lint import CODES, MIN_FONTSIZE, SEVERITIES, lint, warning_diagnostics
 from .snapshot import SCHEMA_VERSION, snapshot
 
@@ -83,8 +84,8 @@ def run(script: str, script_args: list[str] | None = None, *, out: str = "mpl-in
         except SystemExit as exc:
             if exc.code not in (None, 0):
                 error = f"SystemExit: {exc.code}"
-        except Exception:  # noqa: BLE001 - report any crash; Ctrl-C still aborts
-            error = traceback.format_exc()
+        except Exception as exc:  # noqa: BLE001 - report any crash; Ctrl-C still aborts
+            error = script_traceback(exc, path)
         finally:
             sys.argv, sys.path[:] = old_argv, old_path
         _remember(figures, *_open_figures())
@@ -92,7 +93,7 @@ def run(script: str, script_args: list[str] | None = None, *, out: str = "mpl-in
     diagnostics = warning_diagnostics(caught)
     if error is not None:
         last_line = error.strip().splitlines()[-1]
-        diagnostics.insert(0, _top_level("script-error", f"script raised: {last_line}", "read the traceback in report['error'] and fix the script"))
+        diagnostics.insert(0, _top_level("script-error", f"script raised: {last_line}", "read the traceback (also in the report's error field) and fix the script"))
     elif not figures:
         diagnostics.insert(0, _top_level("no-figures", "the script created no Matplotlib figure", "create a figure (plt.subplots()) and do not plt.close() it before the script ends, or call plt.show()"))
 
@@ -126,6 +127,16 @@ def run(script: str, script_args: list[str] | None = None, *, out: str = "mpl-in
     report["report"] = str(report_path)
     report_path.write_text(json.dumps(report, indent=2))
     return report
+
+
+def script_traceback(exc: BaseException, script: Path) -> str:
+    """Traceback starting at the script's first frame, without caret-only lines."""
+    tb = exc.__traceback__
+    while tb is not None and Path(tb.tb_frame.f_code.co_filename).resolve() != script:
+        tb = tb.tb_next
+    lines = traceback.format_exception(type(exc), exc, tb if tb is not None else exc.__traceback__)
+    text = "".join(lines)
+    return "\n".join(line for line in text.splitlines() if line.strip().strip("~^") or not line.strip()) + "\n"
 
 
 @contextmanager
@@ -184,24 +195,30 @@ def _top_level(code: str, message: str, fix: str) -> dict[str, Any]:
 
 
 def _print_summary(report: dict[str, Any]) -> None:
-    def line(where: str, diag: dict[str, Any]) -> None:
-        target = diag["location"]["target"]
-        place = f"{where} {target}" if target else where
-        print(f"[{diag['severity']}] {place} {diag['code']}: {diag['message']}")
-        print(f"    fix: {diag['fix']}")
-
-    for diag in report["diagnostics"]:
-        line("script", diag)
-    for entry in report["figures"]:
-        for diag in entry["diagnostics"]:
-            line(f"fig{entry['index']}", diag)
+    """TOON summary: one row per diagnostic, then where the files are and what to do next."""
+    rows = [
+        {"figure": where, "severity": d["severity"], "code": d["code"], "target": d["location"]["target"], "message": d["message"], "fix": d["fix"]}
+        for where, diags in [("script", report["diagnostics"])] + [(f"fig{e['index']}", e["diagnostics"]) for e in report["figures"]]
+        for d in diags
+    ]
+    data: dict[str, Any] = {"status": report["status"], "figures": len(report["figures"]), "summary": report["summary"]}
+    if rows:
+        data["diagnostics"] = rows
     if report["error"]:
-        print(report["error"].rstrip())
-    counts = ", ".join(f"{report['summary'][s]} {s}" for s in SEVERITIES)
-    pngs = " ".join(entry["png"] for entry in report["figures"]) or "none"
-    print(f"{len(report['figures'])} figure(s): {counts}")
-    print(f"report: {report['report']}")
-    print(f"png: {pngs}")
+        data["traceback"] = report["error"].rstrip().splitlines()
+    data["report"] = report["report"]
+    data["png"] = [entry["png"] for entry in report["figures"]]
+    script = Path(report["script"]).name
+    if report["status"] != "ok":
+        help = ["Fix the script error above, then run `mpl-inspect " + script + "` again"]
+    elif report["summary"]["error"] or report["summary"]["warning"]:
+        help = [
+            "Apply the fixes, then run `mpl-inspect " + script + "` again",
+            "Run `mpl-axi launch " + script + "` to try fixes live without rerunning",
+        ]
+    else:
+        help = ["Open the png to eyeball the result"]
+    print(toon.dumps({**data, "help": help}))
 
 
 if __name__ == "__main__":  # pragma: no cover
