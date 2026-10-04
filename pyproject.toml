@@ -32,6 +32,7 @@ classifiers = [
 
 [project.scripts]
 mpl-inspect = "mpl_inspector.cli:main"
+mpl-axi = "mpl_inspector.axi:main"
 
 [project.urls]
 Homepage = "https://github.com/diegoperez956/mpl_inspector"
