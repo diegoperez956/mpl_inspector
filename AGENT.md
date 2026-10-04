@@ -91,7 +91,8 @@ box in the axes' data coordinates. Colors are `#rrggbb`, or `#rrggbbaa` when
 translucent. Non-finite numbers become `null`.
 
 Targets: `ax0`, `ax0.3` (artist), `ax0.title`, `ax0.xlabel`, `ax0.ylabel`,
-`ax0.xticklabels`, `ax0.legend`, `ax0.xaxis`, `fig.suptitle`, `fig.t0`.
+`ax0.xticklabels`, `ax0.legend`, `ax0.xaxis`, `fig.suptitle`, `fig.supxlabel`,
+`fig.supylabel`, `fig.t0`.
 
 ## Diagnostic codes
 
