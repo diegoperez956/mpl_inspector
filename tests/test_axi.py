@@ -148,6 +148,32 @@ def test_launch_hides_figures_the_script_closed(sessions, tmp_path, capsys):
         main(["stop"])
 
 
+def test_launch_keeps_explicitly_served_figures(sessions, tmp_path, capsys):
+    script = tmp_path / "explicit.py"
+    script.write_text(textwrap.dedent("""
+        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
+        import mpl_inspector
+        made = Figure()
+        made.add_subplot().set_title("direct")
+        mpl_inspector.serve(made)
+        fig, ax = plt.subplots()
+        ax.set_title("closed")
+        mpl_inspector.serve(fig)
+        plt.close(fig)
+        del made, fig, ax
+        import gc
+        gc.collect()
+    """))
+    assert main(["launch", str(script)]) == 0
+    capsys.readouterr()
+    try:
+        code, out = run(capsys, "figures")
+        assert code == 0 and "figures[2]" in out and "direct" in out and "closed" in out
+    finally:
+        main(["stop"])
+
+
 def test_launch_script_that_calls_serve(sessions, tmp_path, capsys):
     script = tmp_path / "served.py"
     script.write_text(textwrap.dedent(SCRIPT) + "import mpl_inspector\nmpl_inspector.serve()\n")

@@ -1,4 +1,5 @@
 import base64
+import gc
 import json
 import os
 import socket
@@ -185,6 +186,39 @@ def test_closed_pyplot_figures_drop_out_unless_served_explicitly(tmp_path, monke
     finally:
         client.close()
         server.stop()
+
+
+def test_served_figures_survive_gc_without_other_references(server, client):
+    standalone = Figure()
+    standalone.add_subplot().set_title("standalone")
+    server.track(standalone)
+    closed, ax = plt.subplots()
+    ax.set_title("closed")
+    server.track(closed)
+    plt.close(closed)
+    del standalone, closed, ax
+    gc.collect()
+    assert [f["title"] for f in client.call("Figure.list")] == ["standalone", "closed"]
+
+
+def test_closed_figure_refs_are_not_found(client, fig):
+    assert client.call("Figure.list")[0]["ref"] == "@f1"
+    plt.close(fig)
+    for method, params in [("Figure.getTree", {"figure": "@f1"}), ("Figure.snapshot", {"figure": "@f1"}), ("Artist.get", {"ref": "@a1"})]:
+        with pytest.raises(RpcError) as err:
+            client.call(method, **params)
+        assert err.value.code == "NOT_FOUND", method
+
+
+def test_open_figures_keep_creation_order_and_default_is_last(server, client):
+    a, ax_a = plt.subplots()
+    ax_a.set_title("A")
+    b, ax_b = plt.subplots()
+    ax_b.set_title("B")
+    server.track(b)
+    rows = client.call("Figure.list")
+    assert [r["title"] for r in rows] == ["A", "B"]
+    assert client.call("Figure.getTree")[0]["ref"] == rows[-1]["ref"]
 
 
 def test_snapshot_text_ids_all_resolve(client, fig):

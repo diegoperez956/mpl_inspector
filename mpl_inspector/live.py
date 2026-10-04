@@ -105,7 +105,7 @@ class LiveServer:
         self.refs = _Refs()
         self.script = script
         self.script_error: str | None = None
-        self._figures: list[weakref.ref] = []
+        self._figures: list[Figure] = []
         self._connected: set[int] = set()
         self._highlights: dict[int, list[Any]] = {}
         self._subscribers: dict[Any, set[str]] = {}
@@ -126,8 +126,8 @@ class LiveServer:
 
     def track(self, fig: Figure) -> None:
         with _LOCK:
-            if not any(known() is fig for known in self._figures):
-                self._figures.append(weakref.ref(fig))
+            if not any(known is fig for known in self._figures):
+                self._figures.append(fig)
 
     def stop(self) -> None:
         if self._stopped.is_set():
@@ -216,12 +216,8 @@ class LiveServer:
     def figures(self) -> list[Figure]:
         from matplotlib._pylab_helpers import Gcf
 
-        tracked = [fig for fig in (ref() for ref in self._figures) if fig is not None]
-        self._figures = [weakref.ref(fig) for fig in tracked]
-        alive = list(tracked)
-        for manager in Gcf.get_all_fig_managers():
-            if not any(fig is manager.canvas.figure for fig in alive):
-                alive.append(manager.canvas.figure)
+        alive = [manager.canvas.figure for manager in Gcf.get_all_fig_managers()]
+        alive += [fig for fig in self._figures if not any(fig is known for known in alive)]
         for fig in alive:
             self._connect_figure(fig)
             for obj in self._targets(fig).values():  # deterministic refs in tree order
@@ -234,7 +230,7 @@ class LiveServer:
             if not figures:
                 raise RpcError("NO_FIGURES", "this process has no open figures")
             return figures[-1]
-        fig = self.refs.get(figure)
+        fig = self._resolve(figure)
         if not isinstance(fig, Figure):
             raise RpcError("BAD_REF", f"{figure} is not a figure ref")
         return fig
@@ -268,10 +264,14 @@ class LiveServer:
         """Accept a ref (``@a3``) or a snapshot id (``ax0.3``) on *figure*."""
         if str(ref).startswith("@"):
             try:
-                return self.refs.get(ref)
+                obj = self.refs.get(ref)
             except RpcError:
                 self.figures()  # assign refs to anything created since the last walk
-                return self.refs.get(ref)
+                obj = self.refs.get(ref)
+            owner = obj if isinstance(obj, Figure) else getattr(obj, "figure", None)
+            if owner is None or not any(root_figure(owner) is fig for fig in self.figures()):
+                raise RpcError("NOT_FOUND", f"{ref} belongs to a closed figure; list open ones with Figure.list")
+            return obj
         obj = self._targets(self._figure(figure)).get(ref)
         if obj is None:
             raise RpcError("NOT_FOUND", f"no element {ref!r}; list them with Figure.getTree")
