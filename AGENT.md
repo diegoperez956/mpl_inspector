@@ -219,17 +219,18 @@ mpl_inspector.serve(fig)          # also expose a figure made with Figure() dire
 Then drive it:
 
 ```text
-$ mpl-axi                          # home: session, figures, next steps
+$ mpl-axi launch sales.py          # home view: session, figures, next steps
 $ mpl-axi tree                     # refs for every element
-nodes[13]{ref,parent,id,type,call,label,visible}:
+nodes[20]{ref,parent,id,type,call,label,visible}:
   @f1,null,fig,Figure,null,"",true
   @x1,@f1,ax0,Axes,null,"",true
   @a1,@x1,ax0.title,Text,ax.set_title(),Revenue,true
   ...
 $ mpl-axi lint                     # diagnostics, each with the ref to act on
-diagnostics[3]{severity,code,ref,target,message,fix}:
+diagnostics[9]{severity,code,ref,target,message,fix}:
   error,tick-label-overlap,@x1,ax0.xticklabels,8 of 8 x tick labels on ax0 overlap each other,...
 $ mpl-axi invoke @x1 tick_params axis=x labelrotation=90
+$ mpl-axi invoke @x2 tick_params axis=x labelrotation=90
 $ mpl-axi invoke @f1 set_layout_engine constrained
 $ mpl-axi set @a1 text="Revenue by region" fontsize=14
 $ mpl-axi lint                     # summary: error: 0
