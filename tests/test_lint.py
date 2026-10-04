@@ -349,3 +349,10 @@ def test_dense_rotated_tick_labels_still_overlap():
     codes = {d["code"] for d in lint(fig)}
     plt.close(fig)
     assert "tick-label-overlap" in codes
+
+
+def test_agent_doc_lists_every_code():
+    from pathlib import Path
+
+    doc = (Path(__file__).parent.parent / "AGENT.md").read_text()
+    assert [code for code in CODES if f"`{code}`" not in doc] == []

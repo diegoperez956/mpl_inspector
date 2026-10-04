@@ -83,7 +83,7 @@ def run(script: str, script_args: list[str] | None = None, *, out: str = "mpl-in
         except SystemExit as exc:
             if exc.code not in (None, 0):
                 error = f"SystemExit: {exc.code}"
-        except BaseException:  # noqa: BLE001 - report any crash, KeyboardInterrupt included
+        except Exception:  # noqa: BLE001 - report any crash; Ctrl-C still aborts
             error = traceback.format_exc()
         finally:
             sys.argv, sys.path[:] = old_argv, old_path
@@ -99,7 +99,7 @@ def run(script: str, script_args: list[str] | None = None, *, out: str = "mpl-in
     entries = []
     for index, fig in enumerate(figures):
         png = out_dir / f"{path.stem}-fig{index}.png"
-        entry: dict[str, Any] = {"index": index, "png": str(png)}
+        entry: dict[str, Any] = {"index": index, "png": str(png), "diagnostics": [], "snapshot": None}
         try:
             entry["diagnostics"] = lint(fig, min_fontsize=min_fontsize)
             entry["snapshot"] = snapshot(fig)

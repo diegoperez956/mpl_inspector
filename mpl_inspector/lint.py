@@ -306,7 +306,7 @@ def _check_text_overlap(ctx: _Ctx) -> Iterator[dict[str, Any]]:
     tick_hits: dict[str, list[_TextEl]] = {}
     pair_hits: dict[tuple[str, str], tuple[_TextEl, _TextEl]] = {}
     for a, b in itertools.combinations(ctx.texts, 2):
-        if not _polygons_overlap(a.corners, b.corners):
+        if not _overlaps(a.bbox, b.bbox) or not _polygons_overlap(a.corners, b.corners):
             continue
         if a.group == b.group:  # same tick axis
             tick_hits.setdefault(a.group, []).extend((a, b))
@@ -354,7 +354,7 @@ def _check_text_overlap(ctx: _Ctx) -> Iterator[dict[str, Any]]:
         )
     for el in ctx.texts:  # text running into (or hidden under) another subplot
         for ax in ctx.axes:
-            if ax is el.ax or not _polygons_overlap(el.corners, _bbox_corners(ax.bbox)):
+            if ax is el.ax or not _overlaps(el.bbox, ax.bbox) or not _polygons_overlap(el.corners, _bbox_corners(ax.bbox)):
                 continue
             if el.ax is not None and (_contains(ax.bbox, el.ax.bbox) or _contains(el.ax.bbox, ax.bbox)):
                 continue  # twin or inset of the text's own axes
