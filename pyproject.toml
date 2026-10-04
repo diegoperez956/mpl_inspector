@@ -30,6 +30,9 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Visualization",
 ]
 
+[project.scripts]
+mpl-inspect = "mpl_inspector.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/diegoperez956/mpl_inspector"
 Repository = "https://github.com/diegoperez956/mpl_inspector"
