@@ -13,7 +13,7 @@ python -m pip install -e .
 GitHub install after the repo is pushed:
 
 ```bash
-python -m pip install "mpl_inspector @ git+https://github.com/diegoperez956/mpl_inspector.git"
+python -m pip install "mpl_inspector @ git+https://github.com/papayuh/mpl_inspector.git"
 ```
 
 If/when the first PyPI release succeeds:
@@ -31,7 +31,7 @@ Recommended path: Trusted Publishing from GitHub Actions.
 1. Create or log in to your PyPI account.
 2. Create a new pending project by adding a Trusted Publisher for this repository in PyPI.
 3. On PyPI, configure:
-   - Owner: `diegoperez956`
+   - Owner: `papayuh`
    - Repository: `mpl_inspector`
    - Workflow name: `Publish`
    - Environment name: `pypi`
