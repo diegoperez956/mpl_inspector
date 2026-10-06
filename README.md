@@ -83,7 +83,7 @@ python -m pip install -e .
 Install directly from GitHub once the repository is pushed:
 
 ```bash
-python -m pip install "mpl_inspector @ git+https://github.com/diegoperez956/mpl_inspector.git"
+python -m pip install "mpl_inspector @ git+https://github.com/papayuh/mpl_inspector.git"
 ```
 
 After the first PyPI release, the intended install command is:

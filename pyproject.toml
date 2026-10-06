@@ -35,9 +35,9 @@ mpl-inspect = "mpl_inspector.cli:main"
 mpl-axi = "mpl_inspector.axi:main"
 
 [project.urls]
-Homepage = "https://github.com/diegoperez956/mpl_inspector"
-Repository = "https://github.com/diegoperez956/mpl_inspector"
-Issues = "https://github.com/diegoperez956/mpl_inspector/issues"
+Homepage = "https://github.com/papayuh/mpl_inspector"
+Repository = "https://github.com/papayuh/mpl_inspector"
+Issues = "https://github.com/papayuh/mpl_inspector/issues"
 
 [project.optional-dependencies]
 clipboard = [
